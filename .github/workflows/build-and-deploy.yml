@@ -14,6 +14,10 @@ env:
   BACKEND_IMAGE: lucianoojeda36/mi-backend
   FRONTEND_IMAGE: lucianoojeda36/mi-frontend
 
+permissions:
+  contents: write
+  packages: write
+
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
