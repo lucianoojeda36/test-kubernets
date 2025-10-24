@@ -27,6 +27,10 @@ This is a Kubernetes-based full-stack application with a Node.js/Express backend
 - **Service mesh**: Services expose via NodePort (backend: 30001 for dev)
 - **Resource management**: Deployments include resource limits, liveness, and readiness probes
 - **Images**: Built locally and used with `imagePullPolicy: Never` for Minikube
+- **GitOps with Argo CD**: Continuous deployment managed through Git
+  - App of Apps pattern: Root application manages child applications for dev and qa
+  - Auto-sync enabled: Changes in Git automatically deployed to cluster
+  - Self-healing: Argo CD automatically corrects drift from Git state
 
 ## Development Commands
 
@@ -78,6 +82,82 @@ kubectl apply -f k8s/dev/configmap.yaml    # Apply ConfigMap
 kubectl delete -f k8s/dev/                 # Delete dev resources
 ```
 
+### Argo CD y GitOps
+
+#### Instalación inicial de Argo CD
+```bash
+# 1. Crear namespace
+kubectl create namespace argocd
+
+# 2. Instalar Argo CD
+kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
+
+# 3. Esperar a que todos los pods estén listos
+kubectl wait --for=condition=Ready pods --all -n argocd --timeout=300s
+
+# 4. Obtener password inicial de admin
+kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath="{.data.password}" | base64 -d && echo
+```
+
+#### Acceder a la UI de Argo CD
+```bash
+# Port-forward para acceder a la UI en localhost:8080
+kubectl port-forward svc/argocd-server -n argocd 8080:443
+
+# Abrir en navegador: https://localhost:8080
+# Usuario: admin
+# Password: (obtener con el comando anterior)
+```
+
+#### Configurar GitOps (primer uso)
+```bash
+# 1. Actualizar los manifiestos con tu repositorio GitHub
+# Editar k8s/argocd/apps/*.yaml y reemplazar:
+#   YOUR_GITHUB_USERNAME/YOUR_REPO con tu repo real
+
+# 2. Aplicar la aplicación root (App of Apps)
+kubectl apply -f k8s/argocd/apps/root-app.yaml
+
+# 3. Verificar que las aplicaciones se crearon
+kubectl get applications -n argocd
+```
+
+#### Operaciones comunes con Argo CD
+```bash
+# Ver todas las aplicaciones
+kubectl get applications -n argocd
+
+# Ver detalles de una aplicación
+kubectl describe application mi-app-dev -n argocd
+
+# Sincronizar manualmente una aplicación (si auto-sync está deshabilitado)
+kubectl patch application mi-app-dev -n argocd --type merge -p '{"operation":{"sync":{}}}'
+
+# Ver logs de sincronización
+kubectl logs -n argocd -l app.kubernetes.io/name=argocd-application-controller -f
+
+# Reiniciar Argo CD (si hay problemas)
+kubectl rollout restart deployment argocd-server -n argocd
+```
+
+#### CLI de Argo CD (opcional)
+```bash
+# Instalar CLI (macOS)
+brew install argocd
+
+# Login
+argocd login localhost:8080 --username admin --password <password-del-paso-anterior>
+
+# Ver aplicaciones
+argocd app list
+
+# Sincronizar app
+argocd app sync mi-app-dev
+
+# Ver detalles y estado
+argocd app get mi-app-dev
+```
+
 ## Key Configuration Patterns
 
 ### Environment Variables in Backend
@@ -103,3 +183,6 @@ Backend implements `/api/health` endpoint used by Kubernetes liveness and readin
 - Backend service is exposed via NodePort 30001 in dev
 - Frontend hardcodes backend URL to `http://localhost:30001/api/mensaje`
 - Base Kubernetes resources are in `k8s/base/`, environment-specific ones in `k8s/{env}/`
+- Argo CD Applications are in `k8s/argocd/apps/` and use placeholders for GitHub repo URL
+- When using GitOps: update manifests in Git, Argo CD automatically syncs to cluster
+- For detailed GitOps workflow and troubleshooting, see GITOPS.md
