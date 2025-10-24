@@ -4,7 +4,6 @@ const cors = require('cors');
 const app = express();
 const PORT = process.env.PORT || 5000;
 
-// Configuración desde variables de entorno
 const config = {
   nodeEnv: process.env.NODE_ENV || 'development',
   logLevel: process.env.LOG_LEVEL || 'info',
@@ -44,7 +43,6 @@ app.get('/api/mensaje', (req, res) => {
       database: {
         host: config.database.host,
         name: config.database.name,
-        // NO expongas passwords en producción
         user: config.database.user
       }
     }
