@@ -21,7 +21,7 @@ function App() {
   return (
     <div className="App">
       <header className="App-header">
-        <h1>Mi App en Kubernetes prueba cambio 2 ddd rrr pp jjjj</h1>
+        <h1>Mi App en Kubernetes con CI/CD Automático</h1>
         {loading ? <p>Cargando...</p> : <p>{mensaje}</p>}
       </header>
     </div>
