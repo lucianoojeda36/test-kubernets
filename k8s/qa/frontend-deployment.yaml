@@ -19,7 +19,7 @@ spec:
     spec:
       containers:
       - name: frontend
-        image: lucianoojeda36/mi-frontend:latest
+        image: lucianoojeda36/mi-frontend:sha-862976a
         imagePullPolicy: Always
         ports:
         - containerPort: 80
