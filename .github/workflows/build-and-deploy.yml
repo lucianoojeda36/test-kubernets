@@ -1,0 +1,120 @@
+name: Build and Deploy
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'backend/**'
+      - 'frontend/**'
+      - '.github/workflows/**'
+
+env:
+  DOCKER_USERNAME: lucianoojeda36
+  BACKEND_IMAGE: lucianoojeda36/mi-backend
+  FRONTEND_IMAGE: lucianoojeda36/mi-frontend
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Generate image tag
+        id: tag
+        run: |
+          SHORT_SHA=$(git rev-parse --short HEAD)
+          echo "IMAGE_TAG=sha-${SHORT_SHA}" >> $GITHUB_OUTPUT
+          echo "SHORT_SHA=${SHORT_SHA}" >> $GITHUB_OUTPUT
+
+      - name: Check if backend changed
+        id: backend_changed
+        run: |
+          if git diff --name-only ${{ github.event.before }} ${{ github.sha }} | grep -q '^backend/'; then
+            echo "changed=true" >> $GITHUB_OUTPUT
+          else
+            echo "changed=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Check if frontend changed
+        id: frontend_changed
+        run: |
+          if git diff --name-only ${{ github.event.before }} ${{ github.sha }} | grep -q '^frontend/'; then
+            echo "changed=true" >> $GITHUB_OUTPUT
+          else
+            echo "changed=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Build and push backend image
+        if: steps.backend_changed.outputs.changed == 'true'
+        uses: docker/build-push-action@v5
+        with:
+          context: ./backend
+          push: true
+          tags: |
+            ${{ env.BACKEND_IMAGE }}:${{ steps.tag.outputs.IMAGE_TAG }}
+            ${{ env.BACKEND_IMAGE }}:latest
+          cache-from: type=registry,ref=${{ env.BACKEND_IMAGE }}:buildcache
+          cache-to: type=registry,ref=${{ env.BACKEND_IMAGE }}:buildcache,mode=max
+
+      - name: Build and push frontend image
+        if: steps.frontend_changed.outputs.changed == 'true'
+        uses: docker/build-push-action@v5
+        with:
+          context: ./frontend
+          push: true
+          tags: |
+            ${{ env.FRONTEND_IMAGE }}:${{ steps.tag.outputs.IMAGE_TAG }}
+            ${{ env.FRONTEND_IMAGE }}:latest
+          cache-from: type=registry,ref=${{ env.FRONTEND_IMAGE }}:buildcache
+          cache-to: type=registry,ref=${{ env.FRONTEND_IMAGE }}:buildcache,mode=max
+
+      - name: Update backend manifests
+        if: steps.backend_changed.outputs.changed == 'true'
+        run: |
+          NEW_IMAGE="${{ env.BACKEND_IMAGE }}:${{ steps.tag.outputs.IMAGE_TAG }}"
+
+          # Update dev
+          sed -i "s|image:.*mi-backend.*|image: ${NEW_IMAGE}|g" k8s/dev/backend-deployment.yaml
+
+          # Update qa
+          sed -i "s|image:.*mi-backend.*|image: ${NEW_IMAGE}|g" k8s/qa/backend-deployment.yaml
+
+      - name: Update frontend manifests
+        if: steps.frontend_changed.outputs.changed == 'true'
+        run: |
+          NEW_IMAGE="${{ env.FRONTEND_IMAGE }}:${{ steps.tag.outputs.IMAGE_TAG }}"
+
+          # Update dev
+          sed -i "s|image:.*mi-frontend.*|image: ${NEW_IMAGE}|g" k8s/dev/frontend-deployment.yaml
+
+          # Update qa
+          sed -i "s|image:.*mi-frontend.*|image: ${NEW_IMAGE}|g" k8s/qa/frontend-deployment.yaml
+
+      - name: Commit and push updated manifests
+        if: steps.backend_changed.outputs.changed == 'true' || steps.frontend_changed.outputs.changed == 'true'
+        run: |
+          git config --global user.name "GitHub Actions Bot"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+
+          git add k8s/dev/*.yaml k8s/qa/*.yaml
+
+          if git diff --staged --quiet; then
+            echo "No changes to commit"
+          else
+            git commit -m "ci: update image tags to ${{ steps.tag.outputs.IMAGE_TAG }} [skip ci]"
+            git push
+          fi

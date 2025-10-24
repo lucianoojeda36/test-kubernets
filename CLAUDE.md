@@ -24,12 +24,18 @@ This is a Kubernetes-based full-stack application with a Node.js/Express backend
 - **Configuration management**:
   - ConfigMaps (`k8s/{env}/configmap.yaml`): Non-sensitive config (NODE_ENV, LOG_LEVEL, DATABASE_HOST, etc.)
   - Secrets (`k8s/{env}/secret.yaml`): Sensitive data (DATABASE_USER, DATABASE_PASSWORD, JWT_SECRET, API_KEY)
-- **Service mesh**: Services expose via NodePort (backend: 30001 for dev)
+- **Service mesh**: Services expose via NodePort (backend: 30001 for dev, 30002 for qa)
 - **Resource management**: Deployments include resource limits, liveness, and readiness probes
-- **Images**: Built locally and used with `imagePullPolicy: Never` for Minikube
+- **Images**: Hosted on Docker Hub (`lucianoojeda36/mi-backend`, `lucianoojeda36/mi-frontend`)
+- **CI/CD Pipeline**: GitHub Actions automatically builds and deploys on push to main
+  - Detects changes in backend/ or frontend/
+  - Builds Docker images with SHA-based tags
+  - Pushes to Docker Hub
+  - Updates K8s manifests with new image tags
+  - Argo CD auto-syncs and deploys
 - **GitOps with Argo CD**: Continuous deployment managed through Git
   - App of Apps pattern: Root application manages child applications for dev and qa
-  - Auto-sync enabled: Changes in Git automatically deployed to cluster
+  - Auto-sync enabled: Changes in manifests automatically deployed to cluster
   - Self-healing: Argo CD automatically corrects drift from Git state
 
 ## Development Commands
@@ -158,6 +164,64 @@ argocd app sync mi-app-dev
 argocd app get mi-app-dev
 ```
 
+### CI/CD con GitHub Actions
+
+El proyecto usa GitHub Actions para automatizar el build y despliegue.
+
+#### Workflow Automático
+
+Cuando haces `git push` con cambios en `backend/` o `frontend/`:
+
+1. GitHub Actions detecta los cambios
+2. Build imágenes Docker con tag basado en SHA del commit (ej: `sha-abc1234`)
+3. Push imágenes a Docker Hub
+4. Actualiza manifiestos K8s con el nuevo tag de imagen
+5. Commit automático de manifiestos con mensaje `[skip ci]`
+6. Argo CD detecta cambio en manifiestos y despliega automáticamente
+
+#### Configuración Requerida (Primera Vez)
+
+**En Docker Hub:**
+1. Crear cuenta en https://hub.docker.com
+2. Crear repositorios públicos: `lucianoojeda36/mi-backend` y `lucianoojeda36/mi-frontend`
+
+**En GitHub (Settings → Secrets and variables → Actions):**
+1. Agregar `DOCKER_USERNAME` = tu usuario de Docker Hub
+2. Agregar `DOCKER_PASSWORD` = tu password o access token de Docker Hub
+
+#### Ver Estado del CI/CD
+
+```bash
+# Ver workflows en GitHub
+# https://github.com/lucianoojeda36/test-kubernets/actions
+
+# Ver imágenes en Docker Hub
+# https://hub.docker.com/r/lucianoojeda36/mi-backend
+# https://hub.docker.com/r/lucianoojeda36/mi-frontend
+
+# Ver tags de imagen actual en manifiestos
+grep "image:" k8s/dev/backend-deployment.yaml
+grep "image:" k8s/dev/frontend-deployment.yaml
+```
+
+#### Workflow Completo de Despliegue
+
+```
+1. Hacer cambios en código (ej: frontend/src/App.js)
+   ↓
+2. git add . && git commit -m "..." && git push
+   ↓
+3. GitHub Actions: Build + Push a Docker Hub (~2-3 min)
+   ↓
+4. GitHub Actions: Update manifests + Commit [skip ci]
+   ↓
+5. Argo CD: Detecta cambio y sincroniza (~1-2 min)
+   ↓
+6. ✅ Aplicación desplegada automáticamente en Minikube
+```
+
+**Tiempo total:** ~3-5 minutos desde push hasta despliegue completo
+
 ## Key Configuration Patterns
 
 ### Environment Variables in Backend
@@ -178,11 +242,12 @@ Backend implements `/api/health` endpoint used by Kubernetes liveness and readin
 
 ## Important Notes
 
-- This project uses Minikube's Docker daemon (via `eval $(minikube docker-env)`)
-- Images are built locally and never pulled from registries (`imagePullPolicy: Never`)
-- Backend service is exposed via NodePort 30001 in dev
-- Frontend hardcodes backend URL to `http://localhost:30001/api/mensaje`
-- Base Kubernetes resources are in `k8s/base/`, environment-specific ones in `k8s/{env}/`
-- Argo CD Applications are in `k8s/argocd/apps/` and use placeholders for GitHub repo URL
-- When using GitOps: update manifests in Git, Argo CD automatically syncs to cluster
+- **CI/CD Automático**: Push a main dispara build y despliegue automático vía GitHub Actions
+- **Imágenes**: Hosted en Docker Hub con tags versionados (`lucianoojeda36/mi-backend:sha-xxxxx`)
+- **Configuración requerida**: Secrets de Docker Hub en GitHub Actions (ver sección CI/CD)
+- **Backend service**: NodePort 30001 (dev), 30002 (qa)
+- **Frontend service**: NodePort 30003 (dev), 30004 (qa)
+- **Argo CD Applications**: En `k8s/argocd/apps/` con App of Apps pattern
+- **GitOps**: Cambios en manifiestos se despliegan automáticamente (auto-sync enabled)
+- **Deployment manual**: `./deploy.sh` ya NO se usa, todo es automatizado con CI/CD
 - For detailed GitOps workflow and troubleshooting, see GITOPS.md

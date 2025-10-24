@@ -19,8 +19,8 @@ spec:
     spec:
       containers:
       - name: frontend
-        image: mi-frontend:latest
-        imagePullPolicy: Never
+        image: lucianoojeda36/mi-frontend:latest
+        imagePullPolicy: Always
         ports:
         - containerPort: 80
         env:

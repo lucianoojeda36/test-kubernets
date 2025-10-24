@@ -20,7 +20,97 @@ root-app (k8s/argocd/apps/root-app.yaml)
 - **mi-app-dev**: Despliega recursos del ambiente dev desde `k8s/dev/`
 - **mi-app-qa**: Despliega recursos del ambiente qa desde `k8s/qa/`
 
-## Instalación Paso a Paso
+## CI/CD Automático con GitHub Actions
+
+Este proyecto incluye un pipeline de CI/CD completo que automatiza todo el proceso de despliegue.
+
+### Cómo Funciona
+
+```
+Developer → git push
+    ↓
+GitHub Actions detecta cambios en backend/ o frontend/
+    ↓
+Build Docker images con tag: lucianoojeda36/mi-backend:sha-abc1234
+    ↓
+Push imágenes a Docker Hub
+    ↓
+Actualiza manifiestos K8s con nuevo tag
+    ↓
+Commit automático [skip ci]
+    ↓
+Argo CD detecta cambio en manifiestos
+    ↓
+Despliega automáticamente en dev y qa
+    ↓
+✅ Aplicación actualizada (3-5 min)
+```
+
+### Configuración de Docker Hub (Primera Vez)
+
+**Paso 1: Crear cuenta y repositorios en Docker Hub**
+
+1. Ir a https://hub.docker.com y crear cuenta (o login)
+2. Crear repositorio público: `lucianoojeda36/mi-backend`
+3. Crear repositorio público: `lucianoojeda36/mi-frontend`
+
+**Paso 2: Configurar Secrets en GitHub**
+
+1. Ir a tu repositorio en GitHub
+2. Settings → Secrets and variables → Actions
+3. Click "New repository secret"
+4. Agregar:
+   - Name: `DOCKER_USERNAME`, Value: `lucianoojeda36`
+   - Name: `DOCKER_PASSWORD`, Value: tu password o access token de Docker Hub
+
+**Paso 3: Push del código con workflow**
+
+```bash
+# Ya está incluido en el repositorio: .github/workflows/build-and-deploy.yml
+git add .
+git commit -m "Configurar CI/CD con GitHub Actions"
+git push
+```
+
+**Paso 4: Verificar que funciona**
+
+```bash
+# Ver workflows en GitHub
+# https://github.com/lucianoojeda36/test-kubernets/actions
+
+# Deberías ver el workflow "Build and Deploy" corriendo
+```
+
+### Workflow de Desarrollo con CI/CD
+
+**Para desplegar cambios:**
+
+```bash
+# 1. Hacer cambios en código (ej: frontend/src/App.js)
+vim frontend/src/App.js
+
+# 2. Commit y push
+git add .
+git commit -m "Actualizar título del frontend"
+git push
+
+# 3. ¡Eso es todo! GitHub Actions + Argo CD hacen el resto
+```
+
+**Monitorear el despliegue:**
+
+```bash
+# Ver workflow en GitHub
+# https://github.com/lucianoojeda36/test-kubernets/actions
+
+# Ver estado en Argo CD
+kubectl get applications -n argocd
+
+# Ver pods actualizándose
+kubectl get pods -n dev -w
+```
+
+## Instalación Paso a Paso de Argo CD
 
 ### 1. Prerequisitos
 

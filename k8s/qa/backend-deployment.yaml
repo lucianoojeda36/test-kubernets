@@ -19,8 +19,8 @@ spec:
     spec:
       containers:
       - name: backend
-        image: mi-backend:latest
-        imagePullPolicy: Never
+        image: lucianoojeda36/mi-backend:latest
+        imagePullPolicy: Always
         ports:
         - containerPort: 5000
         env:
